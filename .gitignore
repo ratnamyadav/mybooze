@@ -1,0 +1,12 @@
+node_modules
+.next
+.turbo
+.env
+.env.local
+.env.*.local
+*.log
+.DS_Store
+out
+dist
+.pnpm-store
+src/payload-types.ts
