@@ -345,6 +345,9 @@ The seed script is idempotent — re-running it skips existing records.
 | `/guides` | [src/app/(frontend)/guides/page.tsx](src/app/(frontend)/guides/page.tsx) | `BreadcrumbList` |
 | `/guides/[slug]` | [src/app/(frontend)/guides/[slug]/page.tsx](src/app/(frontend)/guides/[slug]/page.tsx) | `Article` + `BreadcrumbList` |
 | `/owners` | [src/app/(frontend)/owners/page.tsx](src/app/(frontend)/owners/page.tsx) | `BreadcrumbList` |
+| `/privacy` | [src/app/(frontend)/privacy/page.tsx](src/app/(frontend)/privacy/page.tsx) | `BreadcrumbList` |
+| `/terms` | [src/app/(frontend)/terms/page.tsx](src/app/(frontend)/terms/page.tsx) | `BreadcrumbList` |
+| `/cancellation` | [src/app/(frontend)/cancellation/page.tsx](src/app/(frontend)/cancellation/page.tsx) | `BreadcrumbList` |
 | `/sitemap.xml` | [src/app/(frontend)/sitemap.ts](src/app/(frontend)/sitemap.ts) | — |
 | `/robots.txt` | [src/app/(frontend)/robots.ts](src/app/(frontend)/robots.ts) | — |
 | `/admin/*` | Payload admin UI | excluded from indexing |

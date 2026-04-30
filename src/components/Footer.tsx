@@ -45,14 +45,40 @@ export function Footer({ columns }: Props) {
           ))}
         </div>
         <div className="hr" style={{ margin: '40px 0 20px' }}></div>
+        <nav
+          aria-label="Legal"
+          className="row mono dim"
+          style={{ justifyContent: 'center', flexWrap: 'wrap', gap: 16, fontSize: 12 }}
+        >
+          <Link href="/privacy">Privacy Policy</Link>
+          <span aria-hidden>·</span>
+          <Link href="/terms">Terms &amp; Conditions</Link>
+          <span aria-hidden>·</span>
+          <Link href="/cancellation">Cancellation Policy</Link>
+        </nav>
         <div
           className="row"
-          style={{ justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}
+          style={{
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: 12,
+            marginTop: 16,
+          }}
         >
           <span className="mono dim">
-            © 2026 Mybooz Directory · A content & discovery platform · Not a vendor
+            Mybooz Directory · A content &amp; discovery platform · Not a vendor
           </span>
-          <span className="mono dim">Built in Greater Noida</span>
+          <span className="mono dim">
+            Built with love in India <span aria-label="India">🇮🇳</span> ·{' '}
+            <a
+              href="https://nextflytech.com"
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{ color: 'inherit' }}
+            >
+              © Nextfly Technologies
+            </a>
+          </span>
         </div>
       </div>
     </footer>
