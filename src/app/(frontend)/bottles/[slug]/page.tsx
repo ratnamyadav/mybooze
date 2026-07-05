@@ -7,6 +7,7 @@ import { BottleCard } from '@/components/BottleCard'
 import { Spec } from '@/components/primitives/Spec'
 import { SectionHead } from '@/components/primitives/SectionHead'
 import { JsonLd, breadcrumbSchema, productSchema } from '@/lib/schema'
+import { ogImageUrl } from '@/lib/og'
 
 export const revalidate = 600
 
@@ -22,9 +23,21 @@ export async function generateMetadata({ params }: { params: Params }) {
   })
   const b = docs[0]
   if (!b) return { title: 'Bottle not found' }
+  const title = `${b.name} — price, tasting notes, where to buy`
+  const description = `${b.brand} ${b.name}. ABV ${b.abv ?? '—'}%. Price range and stockists across Delhi NCR.`
+  const priceTag =
+    b.priceLow && b.priceHigh ? `₹${b.priceLow.toLocaleString('en-IN')}–₹${b.priceHigh.toLocaleString('en-IN')}` : ''
+  const og = ogImageUrl({
+    title: b.name,
+    subtitle: [b.brand, b.region, priceTag].filter(Boolean).join(' · '),
+    kind: 'bottle',
+    eyebrow: 'Bottle',
+  })
   return {
-    title: `${b.name} — price, tasting notes, where to buy`,
-    description: `${b.brand} ${b.name}. ABV ${b.abv ?? '—'}%. Price range and stockists across Delhi NCR.`,
+    title,
+    description,
+    openGraph: { title, description, images: [og] },
+    twitter: { card: 'summary_large_image', title, description, images: [og] },
   }
 }
 

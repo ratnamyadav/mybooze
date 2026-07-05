@@ -2,9 +2,11 @@ import { getPayload } from '@/lib/payload'
 import { StoreCard } from '@/components/StoreCard'
 import { Crumbs } from '@/components/Crumbs'
 import { SearchBox } from '@/components/SearchBox'
-import { MapPlaceholder } from '@/components/MapPlaceholder'
+import { StoreMap } from '@/components/Map'
+import { NearMeButton } from '@/components/NearMeButton'
 import { StoreFilters } from './StoreFilters'
 import { JsonLd, breadcrumbSchema } from '@/lib/schema'
+import { haversineKm, parseLatLng } from '@/lib/geo'
 import type { Where } from 'payload'
 import Link from 'next/link'
 
@@ -53,14 +55,37 @@ export default async function StoresPage({ searchParams }: { searchParams: Searc
 
   const sortKey = typeof sp.sort === 'string' ? sp.sort : 'Recommended'
   const sort = sortMap[sortKey] ?? '-rating'
+  const near = parseLatLng(typeof sp.near === 'string' ? sp.near : null)
+  const radiusKm = near ? Math.max(1, Math.min(50, Number(sp.radiusKm ?? 10))) : null
+
+  if (near) {
+    and.push({ lat: { exists: true } })
+    and.push({ lng: { exists: true } })
+  }
 
   const stores = await payload.find({
     collection: 'stores',
     where: and.length ? where : {},
     sort,
-    limit: 24,
+    limit: near ? 200 : 24,
     depth: 1,
   })
+
+  let docs = stores.docs
+  if (near) {
+    docs = docs
+      .filter((s) => typeof s.lat === 'number' && typeof s.lng === 'number')
+      .map((s) => ({
+        ...s,
+        distanceKm:
+          typeof s.lat === 'number' && typeof s.lng === 'number'
+            ? Number(haversineKm(near, { lat: s.lat, lng: s.lng }).toFixed(2))
+            : null,
+      }))
+      .filter((s) => s.distanceKm !== null && s.distanceKm <= radiusKm!)
+      .sort((a, b) => (a.distanceKm ?? 999) - (b.distanceKm ?? 999))
+      .slice(0, 24)
+  }
 
   const crumbs = [
     { label: 'Mybooz', href: '/' },
@@ -80,16 +105,24 @@ export default async function StoresPage({ searchParams }: { searchParams: Searc
         <div className="container" style={{ padding: '24px 32px 28px' }}>
           <Crumbs items={crumbs} />
           <h1 className="display" style={{ fontSize: 52, margin: '14px 0 8px' }}>
-            Liquor stores in Greater Noida
+            {near ? `Liquor stores within ${radiusKm} km` : 'Liquor stores in Greater Noida'}
           </h1>
           <p
             className="muted"
             style={{ fontSize: 15, margin: '0 0 20px', maxWidth: '60ch' }}
           >
-            {stores.totalDocs} verified retailers — sorted by recommendation. All listings
-            reviewed against state excise records before they appear here.
+            {near
+              ? `${docs.length} retailers near your location, sorted by distance.`
+              : `${stores.totalDocs} verified retailers — sorted by recommendation. All listings reviewed against state excise records before they appear here.`}
           </p>
-          <SearchBox initialQuery={q ?? ''} compact />
+          <div
+            style={{ display: 'flex', gap: 12, alignItems: 'flex-start', flexWrap: 'wrap' }}
+          >
+            <div style={{ flex: 1, minWidth: 280 }}>
+              <SearchBox initialQuery={q ?? ''} compact />
+            </div>
+            <NearMeButton />
+          </div>
         </div>
       </section>
 
@@ -122,21 +155,28 @@ export default async function StoresPage({ searchParams }: { searchParams: Searc
               className="grid"
               style={{ gridTemplateColumns: 'repeat(2, 1fr)', gap: 20 }}
             >
-              {stores.docs.map((s) => (
+              {docs.map((s) => (
                 <StoreCard key={s.id} store={s} />
               ))}
-              {stores.docs.length === 0 && (
+              {docs.length === 0 && (
                 <p className="muted">No stores match your filters yet.</p>
               )}
             </div>
             <aside style={{ position: 'sticky', top: 140 }}>
-              <MapPlaceholder
-                pins={stores.docs.slice(0, 5).map((s, i) => ({
-                  x: 20 + i * 14 + (i % 2 ? 6 : 0),
-                  y: 30 + i * 9,
-                  label: '₹' + (i + 1),
-                  href: `/stores/${s.slug}`,
-                }))}
+              <StoreMap
+                pins={docs
+                  .filter(
+                    (s): s is typeof s & { lat: number; lng: number } =>
+                      typeof s.lat === 'number' && typeof s.lng === 'number',
+                  )
+                  .map((s) => ({
+                    id: s.id,
+                    lat: s.lat,
+                    lng: s.lng,
+                    label: s.name,
+                    detail: `${s.area} · ${s.city}`,
+                    href: `/stores/${s.slug}`,
+                  }))}
                 height={520}
               />
               <div className="rd-notice" style={{ marginTop: 16 }}>

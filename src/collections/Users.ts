@@ -27,5 +27,16 @@ export const Users: CollectionConfig = {
       ],
       access: { update: isAdminField },
     },
+    {
+      name: 'bio',
+      type: 'textarea',
+      admin: { description: 'Short author bio used on guide bylines.' },
+    },
+    {
+      name: 'credentials',
+      type: 'text',
+      admin: { description: 'e.g. "Senior Editor · WSET Level 3"' },
+    },
+    { name: 'avatar', type: 'upload', relationTo: 'media' },
   ],
 }

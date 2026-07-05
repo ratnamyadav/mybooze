@@ -13,6 +13,7 @@ import {
   categorySchema,
   faqSchema,
 } from '@/lib/schema'
+import { ogImageUrl } from '@/lib/og'
 
 export const revalidate = 600
 
@@ -28,9 +29,19 @@ export async function generateMetadata({ params }: { params: Params }) {
   })
   const cat = docs[0]
   if (!cat) return { title: 'Category not found' }
+  const title = `${cat.name} — Buying guide & where to buy in Delhi NCR`
+  const description = cat.blurb ?? `Browse ${cat.name} bottles available across Delhi NCR.`
+  const og = ogImageUrl({
+    title: cat.name,
+    subtitle: cat.blurb ?? undefined,
+    kind: 'category',
+    eyebrow: 'Spirit category',
+  })
   return {
-    title: `${cat.name} — Buying guide & where to buy in Delhi NCR`,
-    description: cat.blurb ?? `Browse ${cat.name} bottles available across Delhi NCR.`,
+    title,
+    description,
+    openGraph: { title, description, images: [og] },
+    twitter: { card: 'summary_large_image', title, description, images: [og] },
   }
 }
 

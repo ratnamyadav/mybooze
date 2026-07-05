@@ -1,6 +1,7 @@
+import type { ReactNode } from 'react'
 import { Crumbs } from './Crumbs'
 
-type Section = { heading: string; body: React.ReactNode }
+type Section = { heading: string; body: ReactNode }
 
 type Props = {
   title: string

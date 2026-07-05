@@ -7,9 +7,12 @@ import { fileURLToPath } from 'url'
 import sharp from 'sharp'
 
 import { Users } from './src/collections/Users'
+import { Owners } from './src/collections/Owners'
 import { Media } from './src/collections/Media'
 import { Categories } from './src/collections/Categories'
 import { Stores } from './src/collections/Stores'
+import { StoreInventory } from './src/collections/StoreInventory'
+import { StoreEvents } from './src/collections/StoreEvents'
 import { Bottles } from './src/collections/Bottles'
 import { Articles } from './src/collections/Articles'
 import { Reviews } from './src/collections/Reviews'
@@ -29,7 +32,20 @@ export default buildConfig({
       titleSuffix: ' — Mybooz Admin',
     },
   },
-  collections: [Users, Media, Categories, Stores, Bottles, Articles, Reviews, Faqs, Pages],
+  collections: [
+    Users,
+    Owners,
+    Media,
+    Categories,
+    Stores,
+    StoreInventory,
+    StoreEvents,
+    Bottles,
+    Articles,
+    Reviews,
+    Faqs,
+    Pages,
+  ],
   globals: [Header, Footer],
   editor: lexicalEditor(),
   secret: process.env.PAYLOAD_SECRET || '',
@@ -40,7 +56,10 @@ export default buildConfig({
     pool: {
       connectionString: process.env.DATABASE_URI || '',
     },
-    push: process.env.NODE_ENV === 'development',
+    // Schema is now managed via migrations (src/migrations) rather than dev push,
+    // because the FTS tsvector columns + GIN indexes live outside Payload's schema
+    // and would otherwise be clobbered by push. Run `pnpm payload migrate` after pulling.
+    push: false,
   }),
   sharp,
   plugins: [

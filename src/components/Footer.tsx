@@ -74,7 +74,7 @@ export function Footer({ columns }: Props) {
               href="https://nextflytech.com"
               target="_blank"
               rel="noopener noreferrer"
-              style={{ color: 'inherit' }}
+              style={{ textDecoration: 'underline' }}
             >
               © Nextfly Technologies
             </a>

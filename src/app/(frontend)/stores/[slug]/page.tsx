@@ -4,11 +4,14 @@ import { Crumbs } from '@/components/Crumbs'
 import { Stars } from '@/components/Stars'
 import { StoreCard } from '@/components/StoreCard'
 import { BottleCard } from '@/components/BottleCard'
-import { MapPlaceholder } from '@/components/MapPlaceholder'
+import { StoreMap } from '@/components/Map'
+import { StoreAnalyticsBeacon } from '@/components/StoreAnalyticsBeacon'
+import { StoreContactActions } from '@/components/StoreContactActions'
 import { Spec } from '@/components/primitives/Spec'
 import { SectionHead } from '@/components/primitives/SectionHead'
 import { StoreTabs } from './StoreTabs'
 import { JsonLd, breadcrumbSchema, localBusinessSchema } from '@/lib/schema'
+import { ogImageUrl } from '@/lib/og'
 
 export const revalidate = 300
 
@@ -24,9 +27,19 @@ export async function generateMetadata({ params }: { params: Params }) {
   })
   const store = docs[0]
   if (!store) return { title: 'Store not found' }
+  const title = `${store.name} — ${store.area}, ${store.city}`
+  const description = store.tagline ?? `Verified liquor store in ${store.city}.`
+  const og = ogImageUrl({
+    title: store.name,
+    subtitle: `${store.area} · ${store.city}`,
+    kind: 'store',
+    eyebrow: store.verified ? 'Verified store' : 'Store',
+  })
   return {
-    title: `${store.name} — ${store.area}, ${store.city}`,
-    description: store.tagline ?? `Verified liquor store in ${store.city}.`,
+    title,
+    description,
+    openGraph: { title, description, images: [og] },
+    twitter: { card: 'summary_large_image', title, description, images: [og] },
   }
 }
 
@@ -43,14 +56,20 @@ export default async function StorePage({ params }: { params: Params }) {
   const store = docs[0]
   if (!store) notFound()
 
-  const [reviewsRes, bottlesRes, similarRes] = await Promise.all([
+  const [reviewsRes, inventoryRes, similarRes] = await Promise.all([
     payload.find({
       collection: 'reviews',
       where: { store: { equals: store.id } },
       limit: 10,
       sort: '-createdAt',
     }),
-    payload.find({ collection: 'bottles', limit: 6, sort: '-rating' }),
+    payload.find({
+      collection: 'store-inventory',
+      where: { store: { equals: store.id } },
+      limit: 24,
+      depth: 2,
+      sort: '-featured',
+    }),
     payload.find({
       collection: 'stores',
       where: { id: { not_equals: store.id } },
@@ -68,6 +87,7 @@ export default async function StorePage({ params }: { params: Params }) {
 
   return (
     <main>
+      <StoreAnalyticsBeacon storeId={store.id} />
       <JsonLd data={localBusinessSchema(store)} />
       <JsonLd data={breadcrumbSchema(crumbs)} />
       <section style={{ borderBottom: '1px solid var(--line-soft)' }}>
@@ -200,19 +220,58 @@ export default async function StorePage({ params }: { params: Params }) {
                 </div>
               }
               bottles={
-                <>
-                  <p className="muted" style={{ fontSize: 14, marginBottom: 20 }}>
-                    Top sellers reported by this store · refreshed weekly
+                inventoryRes.docs.length === 0 ? (
+                  <p className="muted" style={{ fontSize: 14 }}>
+                    No bottles listed yet — this store hasn&apos;t shared its inventory.
                   </p>
-                  <div
-                    className="grid"
-                    style={{ gridTemplateColumns: 'repeat(3, 1fr)', gap: 16 }}
-                  >
-                    {bottlesRes.docs.map((b) => (
-                      <BottleCard key={b.id} bottle={b} />
-                    ))}
-                  </div>
-                </>
+                ) : (
+                  <>
+                    <p className="muted" style={{ fontSize: 14, marginBottom: 20 }}>
+                      Bottles stocked at {store.name} · curated by the store
+                    </p>
+                    <div
+                      className="grid"
+                      style={{ gridTemplateColumns: 'repeat(3, 1fr)', gap: 16 }}
+                    >
+                      {inventoryRes.docs.map((it) => {
+                        const bottle = typeof it.bottle === 'object' ? it.bottle : null
+                        if (!bottle) return null
+                        return (
+                          <div key={it.id} style={{ opacity: it.inStock === false ? 0.55 : 1 }}>
+                            <BottleCard bottle={bottle} />
+                            <div
+                              className="row"
+                              style={{
+                                justifyContent: 'space-between',
+                                alignItems: 'center',
+                                marginTop: 6,
+                                padding: '0 4px',
+                                minHeight: 16,
+                              }}
+                            >
+                              {it.priceInr != null ? (
+                                <span className="mono" style={{ fontSize: 12, color: 'var(--fg-2)' }}>
+                                  ₹{it.priceInr.toLocaleString('en-IN')}
+                                </span>
+                              ) : (
+                                <span />
+                              )}
+                              {it.inStock === false ? (
+                                <span className="mono dim" style={{ fontSize: 10 }}>
+                                  Out of stock
+                                </span>
+                              ) : it.featured ? (
+                                <span className="mono" style={{ fontSize: 10, color: 'var(--accent)' }}>
+                                  ★ Featured
+                                </span>
+                              ) : null}
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </>
+                )
               }
               reviews={
                 <>
@@ -381,20 +440,47 @@ export default async function StorePage({ params }: { params: Params }) {
                   </div>
                 )}
               </div>
-              <div
-                className="stack"
-                style={{ '--stack': '8px', marginTop: 20 } as React.CSSProperties}
-              >
-                {store.phone && (
-                  <a href={`tel:${store.phone}`} className="btn primary block">
-                    📞 Call store
-                  </a>
-                )}
-                <button className="btn block">🧭 Get directions</button>
-                <button className="btn block">💬 WhatsApp inquiry</button>
-              </div>
+              <StoreContactActions
+                storeId={store.id}
+                name={store.name}
+                phone={store.phone}
+                lat={store.lat}
+                lng={store.lng}
+              />
               <div className="hr" style={{ margin: '20px 0' }} />
-              <MapPlaceholder pins={[{ x: 50, y: 50, label: '₹' }]} height={180} />
+              {typeof store.lat === 'number' && typeof store.lng === 'number' ? (
+                <StoreMap
+                  pins={[
+                    {
+                      id: store.id,
+                      lat: store.lat,
+                      lng: store.lng,
+                      label: store.name,
+                      detail: store.address,
+                    },
+                  ]}
+                  initialView={{ longitude: store.lng, latitude: store.lat, zoom: 14 }}
+                  height={180}
+                  showNav={false}
+                />
+              ) : (
+                <div
+                  className="mono dim"
+                  style={{
+                    height: 180,
+                    border: '1px solid var(--line-soft)',
+                    borderRadius: 12,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: 12,
+                    textAlign: 'center',
+                    padding: 16,
+                  }}
+                >
+                  Map unavailable —<br />location not set
+                </div>
+              )}
             </div>
           </aside>
         </div>

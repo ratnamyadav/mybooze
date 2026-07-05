@@ -563,6 +563,52 @@ button {
     var(--bg-3);
 }
 
+/* Article body — drop cap on first paragraph, heading rhythm */
+.article-body > p:first-of-type::first-letter {
+  font-family: var(--serif);
+  float: left;
+  font-size: 4.4em;
+  line-height: 0.9;
+  font-weight: 600;
+  padding: 6px 12px 0 0;
+  color: var(--accent);
+  letter-spacing: -0.02em;
+}
+
+.article-body h2 {
+  font-family: var(--serif);
+  font-size: 28px;
+  letter-spacing: -0.01em;
+  margin: 36px 0 12px;
+  color: var(--fg);
+}
+
+.article-body h3 {
+  font-family: var(--serif);
+  font-size: 22px;
+  letter-spacing: -0.005em;
+  margin: 28px 0 10px;
+  color: var(--fg);
+}
+
+.article-body p {
+  margin: 0 0 18px;
+}
+
+.article-body blockquote {
+  border-left: 3px solid var(--accent);
+  padding: 4px 0 4px 18px;
+  margin: 28px 0;
+  color: var(--fg-2);
+  font-style: italic;
+}
+
+.article-body a {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
 /* Responsive */
 @media (max-width: 900px) {
   .footer-grid {

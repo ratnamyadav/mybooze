@@ -5,7 +5,13 @@ import { getPayload } from '@/lib/payload'
 import { Crumbs } from '@/components/Crumbs'
 import { ArticleCard } from '@/components/ArticleCard'
 import { SectionHead } from '@/components/primitives/SectionHead'
+import { ArticleToc } from '@/components/ArticleToc'
+import { AuthorByline } from '@/components/AuthorByline'
 import { JsonLd, articleSchema, breadcrumbSchema } from '@/lib/schema'
+import { ogImageUrl } from '@/lib/og'
+import { extractToc, readingTimeMin } from '@/lib/lexical'
+import { articleConverters } from '@/lib/lexical-converters'
+import type { User } from '@/payload-types'
 
 export const revalidate = 600
 
@@ -21,9 +27,19 @@ export async function generateMetadata({ params }: { params: Params }) {
   })
   const a = docs[0]
   if (!a) return { title: 'Article not found' }
+  const title = a.seo?.title ?? a.title
+  const description = a.seo?.description ?? a.excerpt ?? undefined
+  const og = ogImageUrl({
+    title: a.title,
+    subtitle: a.excerpt ?? undefined,
+    kind: 'guide',
+    eyebrow: a.category ?? 'Guide',
+  })
   return {
-    title: a.seo?.title ?? a.title,
-    description: a.seo?.description ?? a.excerpt,
+    title,
+    description,
+    openGraph: { title, description, images: [og], type: 'article' },
+    twitter: { card: 'summary_large_image', title, description, images: [og] },
   }
 }
 
@@ -63,6 +79,11 @@ export default async function ArticlePage({ params }: { params: Params }) {
     { label: a.title.length > 40 ? a.title.slice(0, 40) + '…' : a.title },
   ]
 
+  const toc = extractToc(a.body)
+  const computedReadMin = readingTimeMin(a.body)
+  const readMin = computedReadMin > 0 ? computedReadMin : a.readMin ?? 5
+  const author = typeof a.author === 'object' ? (a.author as User | null) : null
+
   return (
     <main>
       <JsonLd data={articleSchema(a)} />
@@ -82,7 +103,7 @@ export default async function ArticlePage({ params }: { params: Params }) {
         style={{ padding: '40px 32px', maxWidth: 880 }}
       >
         <span className="eyebrow">
-          {a.category} · {a.readMin} min read · {formatDate(a.datePublished)}
+          {a.category} · {readMin} min read · {formatDate(a.datePublished)}
         </span>
         <h1
           className="display"
@@ -99,20 +120,25 @@ export default async function ArticlePage({ params }: { params: Params }) {
             fontSize: 19,
             color: 'var(--fg-2)',
             lineHeight: 1.55,
-            margin: '0 0 32px',
+            margin: '0 0 24px',
             maxWidth: '60ch',
           }}
         >
           {a.excerpt}
         </p>
 
+        <AuthorByline author={author} date={a.datePublished} />
+
         <div
           className="ph ph-wide"
           data-label={`HERO — ${a.category?.toUpperCase()}`}
-          style={{ aspectRatio: '16/9', borderRadius: 14, marginBottom: 32 }}
+          style={{ aspectRatio: '16/9', borderRadius: 14, margin: '32px 0' }}
         />
 
+        <ArticleToc items={toc} />
+
         <div
+          className="article-body"
           style={{
             fontFamily: 'var(--serif)',
             fontSize: 19,
@@ -122,7 +148,7 @@ export default async function ArticlePage({ params }: { params: Params }) {
           }}
         >
           {a.body ? (
-            <RichText data={a.body} />
+            <RichText data={a.body} converters={articleConverters} />
           ) : (
             <p>This article is being prepared. Check back soon.</p>
           )}

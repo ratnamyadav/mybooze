@@ -5,6 +5,8 @@ import { TopBar } from '@/components/TopBar'
 import { Footer } from '@/components/Footer'
 import { AgeGate } from '@/components/AgeGate'
 import { JsonLd, websiteSchema } from '@/lib/schema'
+import { PostHogProvider } from '@/components/Telemetry/PostHogProvider'
+import { WebVitals } from '@/components/Telemetry/WebVitals'
 
 const fraunces = Fraunces({
   subsets: ['latin'],
@@ -58,11 +60,14 @@ export default async function FrontendLayout({ children }: { children: React.Rea
   return (
     <html lang="en" className={`${fraunces.variable} ${mono.variable}`}>
       <body>
-        <JsonLd data={websiteSchema()} />
-        <AgeGate />
-        <TopBar items={navItems as { key: string; label: string; href: string }[]} />
-        {children}
-        <Footer columns={footerColumns as { heading: string; links: { label: string; href: string }[] }[]} />
+        <PostHogProvider>
+          <WebVitals />
+          <JsonLd data={websiteSchema()} />
+          <AgeGate />
+          <TopBar items={navItems as { key: string; label: string; href: string }[]} />
+          {children}
+          <Footer columns={footerColumns as { heading: string; links: { label: string; href: string }[] }[]} />
+        </PostHogProvider>
       </body>
     </html>
   )

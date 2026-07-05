@@ -1,7 +1,9 @@
+import Link from 'next/link'
 import { Crumbs } from '@/components/Crumbs'
 import { SectionHead } from '@/components/primitives/SectionHead'
 import { ClaimForm } from './ClaimForm'
 import { JsonLd, breadcrumbSchema } from '@/lib/schema'
+import { getCurrentOwner } from '@/lib/owner-auth'
 
 export const metadata = {
   title: 'For Owners — Claim your liquor store listing',
@@ -9,16 +11,40 @@ export const metadata = {
     'Free verified listing for licensed liquor stores in India. Reach 50,000 monthly searchers in Delhi NCR.',
 }
 
-export default function OwnersPage() {
+export default async function OwnersPage() {
   const crumbs = [{ label: 'Mybooz', href: '/' }, { label: 'For Owners' }]
+  const owner = await getCurrentOwner()
 
   return (
     <main>
       <JsonLd data={breadcrumbSchema(crumbs)} />
 
       <section style={{ borderBottom: '1px solid var(--line-soft)' }}>
-        <div className="container" style={{ padding: '24px 32px 0' }}>
+        <div
+          className="container row"
+          style={{
+            padding: '14px 32px 0',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+          }}
+        >
           <Crumbs items={crumbs} />
+          <div className="row" style={{ gap: 10, fontSize: 12 }}>
+            {owner ? (
+              <Link href="/owners/dashboard" className="btn sm">
+                Open dashboard →
+              </Link>
+            ) : (
+              <>
+                <Link href="/owners/login" className="mono dim">
+                  Sign in
+                </Link>
+                <Link href="/owners/register" className="btn sm">
+                  Create account
+                </Link>
+              </>
+            )}
+          </div>
         </div>
         <div className="container" style={{ padding: '32px 32px 64px' }}>
           <div

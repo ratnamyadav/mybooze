@@ -1,8 +1,14 @@
 'use server'
 
+import * as Sentry from '@sentry/nextjs'
 import { getPayload } from '@/lib/payload'
+import { childLogger } from '@/lib/logger'
+import { captureServer } from '@/lib/posthog'
+
+const nullable = (s: string): string | undefined => (s.length > 0 ? s : undefined)
 
 export async function submitClaim(formData: FormData) {
+  const log = childLogger({ action: 'submitClaim' })
   const payload = await getPayload()
 
   const name = String(formData.get('name') ?? '').trim()
@@ -15,6 +21,8 @@ export async function submitClaim(formData: FormData) {
   const consent = formData.get('consent') === 'on'
 
   if (!name || !city || !area || !address || !consent) {
+    log.info({ name, city, area, hasAddress: Boolean(address), consent }, 'claim_rejected_validation')
+    await captureServer('owner_claim_rejected', { reason: 'validation', city, area })
     return { ok: false, error: 'Please fill all required fields and confirm ownership.' }
   }
 
@@ -23,22 +31,30 @@ export async function submitClaim(formData: FormData) {
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/(^-|-$)/g, '')
 
-  await payload.create({
-    collection: 'stores',
-    data: {
-      name,
-      slug,
-      city,
-      area,
-      address,
-      phone,
-      license,
-      tagline: ownerName ? `Submitted by ${ownerName}` : undefined,
-      verified: false,
-      openNow: true,
-      status: 'pending',
-    },
-  })
+  try {
+    await payload.create({
+      collection: 'stores',
+      data: {
+        name,
+        slug,
+        city,
+        area,
+        address,
+        phone: nullable(phone),
+        license: nullable(license),
+        tagline: ownerName ? `Submitted by ${ownerName}` : undefined,
+        verified: false,
+        openNow: true,
+        status: 'pending',
+      },
+    })
 
-  return { ok: true }
+    log.info({ slug, city, area }, 'claim_submitted')
+    await captureServer('owner_claim_submitted', { slug, city, area, hasLicense: Boolean(license) })
+    return { ok: true }
+  } catch (err) {
+    log.error({ err, slug }, 'claim_failed')
+    Sentry.captureException(err, { tags: { action: 'submitClaim' }, extra: { slug, city, area } })
+    return { ok: false, error: 'Something went wrong saving your claim. Please try again.' }
+  }
 }

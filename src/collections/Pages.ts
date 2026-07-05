@@ -6,6 +6,8 @@ import { revalidateOnPublish } from '../hooks/revalidate'
 import { slugifyFrom } from '../hooks/slugify'
 import { statusField } from '../fields/status'
 
+const STATIC_ROUTE_SLUGS = new Set(['privacy', 'terms', 'cancellation'])
+
 export const Pages: CollectionConfig = {
   slug: 'pages',
   admin: {
@@ -69,7 +71,11 @@ export const Pages: CollectionConfig = {
   hooks: {
     afterChange: [
       revalidateOnPublish({
-        paths: (doc) => (doc.slug === 'home' ? ['/'] : [`/${doc.slug}`]),
+        paths: (doc) => {
+          if (doc.slug === 'home') return ['/']
+          if (STATIC_ROUTE_SLUGS.has(doc.slug)) return []
+          return [`/${doc.slug}`]
+        },
       }),
     ],
   },

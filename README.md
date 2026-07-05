@@ -132,6 +132,63 @@ Both are valid root layouts in the App Router (Next supports multiple root layou
 
 **Cache strategy.** Each public page sets `export const revalidate = N` (300–600s). When an admin publishes a change, the collection's `afterChange` hook calls `revalidatePath()` on the affected route(s), invalidating the cache without waiting for the timer.
 
+### Observability layer
+
+All three observability pillars are wired in but **opt-in via env vars** — without keys set, they're transparent no-ops, so local dev is unaffected.
+
+| Pillar | Tool | Purpose | Files |
+|---|---|---|---|
+| Errors + perf traces | **Sentry** (`@sentry/nextjs`) | Captures uncaught exceptions, server actions failures, slow transactions. Source-map upload runs only when `SENTRY_AUTH_TOKEN` + `SENTRY_ORG` are set in CI. | [sentry.client.config.ts](sentry.client.config.ts), [sentry.server.config.ts](sentry.server.config.ts), [sentry.edge.config.ts](sentry.edge.config.ts), [instrumentation.ts](instrumentation.ts), [instrumentation-client.ts](instrumentation-client.ts) |
+| Product analytics + pageviews | **PostHog** (`posthog-js` + `posthog-node`) | Pageview on each route change, custom events (e.g. `owner_claim_submitted`), and Web Vitals beacon. Wired via a client provider mounted in the public layout. | [src/lib/posthog.ts](src/lib/posthog.ts), [src/components/Telemetry/PostHogProvider.tsx](src/components/Telemetry/PostHogProvider.tsx), [src/components/Telemetry/WebVitals.tsx](src/components/Telemetry/WebVitals.tsx) |
+| Structured logs | **Pino** | JSON logs in prod, pretty in dev. Used in server actions and Payload hooks. Redacts auth headers + password/token fields by default. | [src/lib/logger.ts](src/lib/logger.ts) |
+
+Server-side helpers:
+
+```ts
+import { childLogger } from '@/lib/logger'
+import { captureServer } from '@/lib/posthog'
+import * as Sentry from '@sentry/nextjs'
+
+const log = childLogger({ action: 'submitClaim' })
+log.info({ city, area }, 'claim_submitted')
+await captureServer('owner_claim_submitted', { city })
+Sentry.captureException(err)
+```
+
+### Maps + geo search
+
+[StoreMap](src/components/Map.tsx) uses **MapLibre GL** via `react-map-gl` — no Mapbox token required. Tile style defaults to `https://demotiles.maplibre.org/style.json` for dev; set `NEXT_PUBLIC_MAP_STYLE_URL` to a MapTiler / Stadia / Carto URL for production.
+
+The `/stores` list page accepts `?near=lat,lng&radiusKm=N` query params. Filtering + distance sort runs in JS via [`haversineKm`](src/lib/geo.ts) (no PostGIS dependency — can be migrated to `ST_Distance` later if performance demands it). The [NearMeButton](src/components/NearMeButton.tsx) uses the browser Geolocation API to populate the query.
+
+Store detail pages render a small map for the single pin and a Google Maps "Get directions" deep-link built via [`directionsUrl`](src/lib/geo.ts).
+
+### Search
+
+[SearchBox](src/components/SearchBox.tsx) is a debounced (180ms) typeahead `combobox` with arrow-key navigation. Hits API at [/api/search](src/app/(frontend)/api/search/route.ts), which queries Postgres **full-text search** (`tsvector` + GIN, `simple` config) across Stores / Bottles / Categories / Articles with prefix-autocomplete (`:*`), ranked by `ts_rank`. A `pg_trgm` trigram index backs an `ILIKE`/`similarity()` fallback so mid-token substrings still match (e.g. "callan" → "Macallan"). The FTS columns and indexes are created by the [`fts_search` migration](src/migrations/20260626_060945_fts_search.ts) and only return `_status = 'published'` rows.
+
+### Owner platform
+
+| Surface | What it does |
+|---|---|
+| [Owners collection](src/collections/Owners.ts) | Auth collection separate from `users`. Plan field (`free` / `verified` / `featured`), Razorpay customer + subscription IDs, plan renewal date. |
+| [Stores.owner relation](src/collections/Stores.ts) | Optional rel → Owners. Admin-only manual reassignment. Owners can only update their own claimed stores via field-level access. |
+| [/owners/login](src/app/(frontend)/owners/login/page.tsx) + [/register](src/app/(frontend)/owners/register/page.tsx) | Email/password auth via Payload's built-in `auth.login`. Sets `payload-token` cookie. Magic-link upgrade is a separate roadmap item. |
+| [/owners/dashboard](src/app/(frontend)/owners/dashboard/page.tsx) | Lists claimed stores, current plan, upgrade CTA. |
+| [/owners/dashboard/stores/[id]](src/app/(frontend)/owners/dashboard/stores/[id]/page.tsx) | Self-serve edit form for tagline / phone / address / open-now / pickup / delivery / parking. Re-checks ownership server-side before write. |
+| [getCurrentOwner()](src/lib/owner-auth.ts) | Reads the request's `payload-token` and returns the Owner if the token belongs to an `owners` doc. Used by every gated page. |
+
+### Billing (Razorpay)
+
+| Piece | File | Purpose |
+|---|---|---|
+| SDK wrapper | [src/lib/razorpay.ts](src/lib/razorpay.ts) | Lazy client, plan-ID lookup, `verifyWebhookSignature` (HMAC-SHA256, timing-safe). Returns `isRazorpayConfigured()` → all flows degrade gracefully if env vars are missing. |
+| Server action | [src/app/(frontend)/owners/dashboard/checkoutAction.ts](src/app/(frontend)/owners/dashboard/checkoutAction.ts) | Creates a Razorpay subscription, stores `razorpaySubscriptionId` on the Owner, returns the `short_url` for the hosted checkout page. |
+| Client button | [src/app/(frontend)/owners/dashboard/CheckoutButton.tsx](src/app/(frontend)/owners/dashboard/CheckoutButton.tsx) | Opens the Razorpay-hosted payment page in a new tab. |
+| Webhook | [src/app/(payload)/api/billing/razorpay/webhook/route.ts](src/app/(payload)/api/billing/razorpay/webhook/route.ts) | Verifies HMAC, parses subscription status, flips `Owner.plan` to `verified` / `featured` on activation, back to `free` on cancel/expire. Idempotent. |
+
+Plan IDs are pulled from `RAZORPAY_PLAN_VERIFIED` / `RAZORPAY_PLAN_FEATURED` env vars (create the plans in the Razorpay dashboard first). The webhook secret (`RAZORPAY_WEBHOOK_SECRET`) is configured in Razorpay → Webhooks UI and verified on every call.
+
 ---
 
 ## 6. Directory layout
@@ -317,8 +374,14 @@ cp .env.example .env.local
 
 pnpm install
 pnpm generate:types       # generates src/payload-types.ts from collections
+pnpm payload migrate      # apply DB migrations (schema is migration-managed, not dev push)
 pnpm dev                  # http://localhost:3000 — public site + /admin
 ```
+
+> **Schema is migration-managed.** Dev `push` is disabled (`payload.config.ts`), because the
+> full-text-search `tsvector` columns and GIN indexes live outside Payload's schema. Run
+> `pnpm payload migrate` after pulling changes that touch collections or migrations. Create new
+> migrations with `pnpm payload migrate:create <name>`.
 
 Visit `http://localhost:3000/admin` and create the first user — this user becomes the seed admin. Set `role: 'admin'` on it (defaults to `editor`).
 
@@ -345,6 +408,11 @@ The seed script is idempotent — re-running it skips existing records.
 | `/guides` | [src/app/(frontend)/guides/page.tsx](src/app/(frontend)/guides/page.tsx) | `BreadcrumbList` |
 | `/guides/[slug]` | [src/app/(frontend)/guides/[slug]/page.tsx](src/app/(frontend)/guides/[slug]/page.tsx) | `Article` + `BreadcrumbList` |
 | `/owners` | [src/app/(frontend)/owners/page.tsx](src/app/(frontend)/owners/page.tsx) | `BreadcrumbList` |
+| `/owners/login`, `/owners/register` | owner auth pages | noindex |
+| `/owners/dashboard`, `/owners/dashboard/stores/[id]` | self-serve owner dashboard | noindex |
+| `/api/search?q=…` | [src/app/(frontend)/api/search/route.ts](src/app/(frontend)/api/search/route.ts) | typeahead JSON |
+| `/api/og?title=…&kind=…` | [src/app/(frontend)/api/og/route.tsx](src/app/(frontend)/api/og/route.tsx) | branded OG image (edge) |
+| `/api/billing/razorpay/webhook` | Razorpay subscription webhook (HMAC-verified) | — |
 | `/privacy` | [src/app/(frontend)/privacy/page.tsx](src/app/(frontend)/privacy/page.tsx) | `BreadcrumbList` |
 | `/terms` | [src/app/(frontend)/terms/page.tsx](src/app/(frontend)/terms/page.tsx) | `BreadcrumbList` |
 | `/cancellation` | [src/app/(frontend)/cancellation/page.tsx](src/app/(frontend)/cancellation/page.tsx) | `BreadcrumbList` |
@@ -420,6 +488,6 @@ When TS 7.0 stable ships and Payload + Next confirm support, swap is a one-line 
 - **No store-owner login yet.** The Owners page submits a `pending` Store via server action, but there's no per-owner login or dashboard. Owners are notified out-of-band; admins manage everything in `/admin`.
 - **No payment processing.** Plan tiers on the Owners page are static — no Stripe / Razorpay integration.
 - **Tasting / budget filter chips** on category pages are visual placeholders — they don't filter the bottle grid yet.
-- **Drop cap + in-article TOC** on guide articles aren't rendered; would need a custom Lexical converter.
+- ~~**Drop cap + in-article TOC** on guide articles aren't rendered~~ — done. See [src/lib/lexical.ts](src/lib/lexical.ts) (TOC + reading time extractors) and [src/lib/lexical-converters.tsx](src/lib/lexical-converters.tsx) (slugified heading IDs).
 - **Tweaks panel** from the design (theme/density/hero variant) was deliberately skipped — design-time only.
 - **TypeScript v7 stable** isn't available yet; we run v6 as the toolchain default and v7 beta side-by-side for fast checks.

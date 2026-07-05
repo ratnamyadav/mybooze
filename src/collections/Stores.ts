@@ -16,7 +16,13 @@ export const Stores: CollectionConfig = {
   access: {
     read: publishedOrLoggedIn,
     create: isEditorOrAdmin,
-    update: isEditorOrAdmin,
+    // Editors/admins can update any store. Owners can update only their own claimed stores.
+    update: ({ req: { user } }) => {
+      if (!user) return false
+      if ('role' in user && (user.role === 'admin' || user.role === 'editor')) return true
+      if (user.collection === 'owners') return { owner: { equals: user.id } }
+      return false
+    },
     delete: isAdmin,
   },
   fields: [
@@ -106,6 +112,20 @@ export const Stores: CollectionConfig = {
       type: 'select',
       hasMany: true,
       options: ['Cash', 'UPI', 'Card', 'Wallet'].map((v) => ({ label: v, value: v })),
+    },
+    {
+      name: 'owner',
+      type: 'relationship',
+      relationTo: 'owners',
+      hasMany: false,
+      admin: {
+        description: 'The owner account that has claimed this listing (if any).',
+      },
+      // Only admins can manually reassign ownership.
+      access: {
+        update: ({ req: { user } }) =>
+          Boolean(user && 'role' in user && user.role === 'admin'),
+      },
     },
     statusField,
   ],
