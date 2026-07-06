@@ -1,4 +1,5 @@
 import type { Field } from 'payload'
+import { isAdminUser } from '../access/isAdmin'
 
 export const statusField: Field = {
   name: 'status',
@@ -13,7 +14,7 @@ export const statusField: Field = {
   ],
   access: {
     update: ({ req: { user }, data }) => {
-      if (data?.status === 'published') return user?.role === 'admin'
+      if (data?.status === 'published') return isAdminUser(user)
       return Boolean(user)
     },
   },

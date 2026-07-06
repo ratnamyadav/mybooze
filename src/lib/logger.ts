@@ -1,4 +1,5 @@
-import 'server-only'
+// ponytail: no 'server-only' guard — it breaks the Payload CLI (migrate runs outside Next.js).
+// Keep this module out of client components by convention.
 import pino, { type Logger } from 'pino'
 
 const isDev = process.env.NODE_ENV !== 'production'
