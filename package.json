@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "next dev",
+    "prebuild": "pnpm run generate:types",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
